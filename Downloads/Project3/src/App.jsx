@@ -21,7 +21,7 @@ const TEST_IDS = ALL_TESTS.map(t => t.id);
 export default function App() {
   const [phase, setPhase]               = useState('landing');
   const [demoMode, setDemoMode]         = useState(false);
-  const [apiKey, setApiKey]             = useState('');
+  const [apiKey, setApiKey]             = useState(import.meta.env.VITE_ANTHROPIC_KEY ?? '');
   const [userProfile, setUserProfile]   = useState(null);
   const [testResults, setTestResults]   = useState({});
   const [scores, setScores]             = useState({ aggregate: 0, _completedTests: 0 });
@@ -185,7 +185,7 @@ export default function App() {
   if (phase === 'spiral') {
     return (
       <div style={{ minHeight: '100vh' }}>
-        <TopBar phase={phase} demoMode={demoMode} apiKey={apiKey} setApiKey={setApiKey} />
+        <TopBar phase={phase} demoMode={demoMode} />
         <SpiralTest demoMode={demoMode} onComplete={(r) => handleTestComplete('spiral', r)} />
       </div>
     );
@@ -193,7 +193,7 @@ export default function App() {
   if (phase === 'keyboard') {
     return (
       <div style={{ minHeight: '100vh' }}>
-        <TopBar phase={phase} demoMode={demoMode} apiKey={apiKey} setApiKey={setApiKey} />
+        <TopBar phase={phase} demoMode={demoMode} />
         <KeyboardTest demoMode={demoMode} onComplete={(r) => handleTestComplete('keyboard', r)} />
       </div>
     );
@@ -201,7 +201,7 @@ export default function App() {
   if (phase === 'voice') {
     return (
       <div style={{ minHeight: '100vh' }}>
-        <TopBar phase={phase} demoMode={demoMode} apiKey={apiKey} setApiKey={setApiKey} />
+        <TopBar phase={phase} demoMode={demoMode} />
         <VoiceTest demoMode={demoMode} onComplete={(r) => handleTestComplete('voice', r)} />
       </div>
     );
@@ -209,7 +209,7 @@ export default function App() {
   if (phase === 'reactionTime') {
     return (
       <div style={{ minHeight: '100vh' }}>
-        <TopBar phase={phase} demoMode={demoMode} apiKey={apiKey} setApiKey={setApiKey} />
+        <TopBar phase={phase} demoMode={demoMode} />
         <ReactionTest demoMode={demoMode} onComplete={(r) => handleTestComplete('reactionTime', r)} />
       </div>
     );
@@ -219,7 +219,7 @@ export default function App() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Top bar */}
-      <TopBar phase={phase} demoMode={demoMode} apiKey={apiKey} setApiKey={setApiKey} />
+      <TopBar phase={phase} demoMode={demoMode} />
 
       {/* Progress stepper */}
       <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
@@ -273,7 +273,7 @@ export default function App() {
   );
 }
 
-function TopBar({ phase, demoMode, apiKey, setApiKey }) {
+function TopBar({ phase, demoMode }) {
   const idx = ALL_TESTS.findIndex(t => t.id === phase);
   return (
     <header style={{
@@ -296,24 +296,11 @@ function TopBar({ phase, demoMode, apiKey, setApiKey }) {
           </span>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {demoMode && (
-          <span className="pill" style={{ background: 'rgba(255,181,71,0.12)', borderColor: 'rgba(255,181,71,0.3)', color: 'var(--accent-amber)', fontSize: '0.65rem' }}>
-            DEMO MODE ON
-          </span>
-        )}
-        <input
-          type="password"
-          placeholder="Anthropic API key"
-          value={apiKey}
-          onChange={e => setApiKey(e.target.value)}
-          style={{
-            width: 180, padding: '5px 10px', borderRadius: 6, fontSize: '0.72rem',
-            background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-            color: 'var(--text-primary)', outline: 'none',
-          }}
-        />
-      </div>
+      {demoMode && (
+        <span className="pill" style={{ background: 'rgba(255,181,71,0.12)', borderColor: 'rgba(255,181,71,0.3)', color: 'var(--accent-amber)', fontSize: '0.65rem' }}>
+          DEMO MODE ON
+        </span>
+      )}
     </header>
   );
 }
