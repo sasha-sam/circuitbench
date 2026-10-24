@@ -1,0 +1,1 @@
+Analyze the electrical circuit shown in the image. Identify the single primary circuit fault, if one is present. Give a concise diagnosis and identify the affected component or connection. If no fault is present, answer "No fault detected."

@@ -1,0 +1,5 @@
+Examine the electrical circuit diagram in the provided image.
+
+{question}
+
+List each component type and its count in the format: "component_name (count)". Separate entries with commas.

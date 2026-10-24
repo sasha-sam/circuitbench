@@ -1,0 +1,5 @@
+Examine the electrical circuit diagram in the provided image.
+
+{question}
+
+Be concise. List the component types with counts, then describe the general topology in one sentence.

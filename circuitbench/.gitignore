@@ -1,0 +1,29 @@
+# Secrets
+.env
+
+# Large data files (download separately per README)
+data/raw/cghd/cghd-zenodo-16.zip
+data/raw/aitee/images/
+data/raw/aitee/aitee_dataset.zip
+data/raw/cghd/cghd_extracted/
+data/faults/
+
+# Model output files
+results/outputs/
+
+# Private project instructions
+CLAUDE.md
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

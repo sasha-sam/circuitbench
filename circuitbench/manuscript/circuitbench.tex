@@ -1,0 +1,677 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{multirow}
+\usepackage{array}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{CircuitBench: Benchmarking Vision-Language Models\\
+for Electronic Circuit Reasoning and Fault Diagnosis}
+
+\author{\IEEEauthorblockN{Sasha Sam}
+\IEEEauthorblockA{\textit{Purdue University}\\
+West Lafayette, Indiana, USA}}
+
+\maketitle
+
+% ===========================================================================
+\begin{abstract}
+Vision-language models (VLMs) are increasingly proposed for use in
+engineering education, including as conversational laboratory assistants
+capable of interpreting circuit diagrams and diagnosing faults.
+Before such systems are deployed, their reliability on structured
+electrical-engineering tasks must be characterized.
+We present \emph{CircuitBench}, a source-backed benchmark for evaluating
+VLMs on electronic-circuit understanding, reasoning, and fault diagnosis,
+derived from two publicly available datasets: the AITEE Electrical Circuit
+Dataset (828 annotated schematic images~\cite{knievel2025aitee_dataset})
+and the CGHD hand-drawn circuit dataset~\cite{thoma2025cghd}.
+The benchmark comprises 8,598 items across three task categories:
+component recognition (Task~A), connectivity and topology reasoning
+(Task~B), and fault diagnosis (Task~E), with a 2,581-item held-out
+test split.
+We evaluate three locally-hosted open-weight VLMs under a standardized
+zero-shot prompting protocol on a development-split sample.
+The best-performing model, Gemma~3~4B, achieves 38.3\% overall accuracy
+($n{=}81$), with markedly higher performance on binary yes/no subtasks
+(fault presence: 87.5\%; topology structure: 87.5\%) than on counting or
+free-text tasks (node count: 0\%; circuit description: 0\%).
+LLaVA~7B achieves 23.3\% and LLaVA-Phi3 achieves 8.0\%.
+All models fail completely on connectivity-counting and free-text
+description tasks.
+These results suggest that current small open-weight VLMs are not
+sufficiently reliable for autonomous use in electronics education or
+circuit debugging, and that fault detection and topology reasoning
+present distinct capability profiles worth investigating further.
+\end{abstract}
+
+\begin{IEEEkeywords}
+vision-language models, multimodal reasoning, electrical circuits,
+fault diagnosis, engineering education, benchmark
+\end{IEEEkeywords}
+
+
+% ===========================================================================
+\section{Introduction}
+\label{sec:intro}
+
+Vision-language models have demonstrated strong performance on visual
+question answering, scientific diagram interpretation, and chart
+understanding~\cite{liu2023mmbench,lu2022scienceqa,masry2022chartqa}.
+As these models improve, there is growing interest in applying them to
+engineering education---for example, as conversational laboratory
+assistants that can identify circuit components, trace signal paths, and
+diagnose wiring errors~\cite{knievel2025aitee_paper}.
+
+However, circuits are not generic images.
+Interpreting an electrical schematic requires recognizing specific symbols
+(resistors, voltage sources, grounds), understanding how those symbols are
+connected by wires and nodes, reasoning about series and parallel
+topologies, and---for fault diagnosis---identifying which connections or
+components violate expected circuit structure.
+An incorrect diagnosis from an AI assistant could mislead a student
+attempting to debug a real circuit.
+
+Before such systems are deployed, it is important to characterize
+whether contemporary VLMs can perform these tasks reliably.
+Prior benchmarks focus on natural images~\cite{liu2023mmbench}, scientific
+figures~\cite{lu2022scienceqa}, and charts~\cite{masry2022chartqa}, but
+systematic evaluation on electrical circuit diagrams has received limited
+attention.
+The AITEE project introduced annotated educational circuit images and an
+agentic tutoring pipeline~\cite{knievel2025aitee_paper,knievel2025aitee_dataset}
+but did not conduct a cross-model VLM benchmark.
+The CGHD dataset provides rich annotations for hand-drawn
+circuits~\cite{thoma2021cghd_paper,thoma2025cghd} but is a recognition
+resource, not an evaluation benchmark.
+
+We introduce \emph{CircuitBench}, a source-backed benchmark that fills
+this gap.
+It spans three circuit-reasoning task categories, is derived from
+two publicly licensed datasets, and includes controlled fault-injection
+items with deterministic ground truth.
+We evaluate three open-weight VLMs under identical zero-shot conditions
+and analyze their failure modes.
+
+\textbf{Contributions:}
+\begin{itemize}
+  \item CircuitBench, a benchmark of 8,598 items derived from AITEE and
+        CGHD with full provenance metadata and a frozen 2,581-item test split;
+  \item a controlled fault-injection protocol producing 798 fault-injected
+        images with deterministic labels from 200 source circuits;
+  \item an empirical comparison of three open-weight VLMs under
+        standardized zero-shot prompting; and
+  \item an error analysis identifying recurring failure modes across models
+        and task categories.
+\end{itemize}
+
+
+% ===========================================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Vision-Language Models and Multimodal Reasoning}
+
+Large vision-language models such as GPT-4o~\cite{openai2024gpt4o},
+Gemini~\cite{google2024gemini}, and LLaVA~\cite{liu2023llava}
+combine a visual encoder with a language model decoder trained on
+image-text pairs.
+MMBench~\cite{liu2023mmbench} and ScienceQA~\cite{lu2022scienceqa}
+provide broad multimodal evaluation, while ChartQA~\cite{masry2022chartqa}
+focuses on chart comprehension.
+Structured technical diagrams such as circuit schematics differ
+substantially from the natural images and charts that dominate these
+benchmarks, and their evaluation remains underexplored.
+
+\subsection{AI for Engineering Education}
+
+AI tutoring systems have been applied across STEM subjects, with
+vision-language models enabling diagram-based question
+answering~\cite{lu2022scienceqa}.
+The AITEE system~\cite{knievel2025aitee_paper} is the most directly
+relevant recent work: it introduces 828 annotated first-semester
+circuit images and proposes an agentic tutoring pipeline using
+image-to-netlist conversion.
+CircuitBench uses AITEE as its primary data source.
+
+\subsection{Circuit Diagram Recognition and Understanding}
+
+Automated circuit interpretation has been studied as a pipeline:
+detect symbols, extract connectivity, generate a netlist.
+Thoma et al.~\cite{thoma2021cghd_paper} introduced the CGHD dataset
+and demonstrated deep-learning-based component localization in hand-drawn
+circuit images.
+Alakhras et al.~\cite{alakhras2026sina} showed that combining deep
+learning, connected-component labeling, and OCR achieves 96.67\%
+netlist generation accuracy on digital schematics.
+Nguyen et al.~\cite{nguyen2024circuitparse} applied Graph Attention
+Networks to netlist parsing of integrated-circuit images.
+These works extract structured representations from circuit images;
+CircuitBench instead evaluates whether VLMs can answer natural-language
+reasoning questions \emph{without} access to extracted annotations.
+
+\subsection{Technical Visual-Reasoning Benchmarks}
+
+ScienceQA~\cite{lu2022scienceqa} and ChartQA~\cite{masry2022chartqa}
+evaluate multimodal reasoning on science figures and charts,
+respectively, but neither includes electrical schematics or circuit-level
+reasoning tasks.
+To our knowledge, CircuitBench is the first benchmark specifically
+designed to evaluate VLMs on component recognition, topology reasoning,
+and fault diagnosis from electrical circuit diagrams.
+
+
+% ===========================================================================
+\section{CircuitBench}
+\label{sec:benchmark}
+
+\subsection{Source Datasets}
+
+\textbf{AITEE.}
+The AITEE Electrical Circuit Dataset~\cite{knievel2025aitee_dataset}
+contains 828 annotated schematic images of first-semester electrical
+engineering circuits, including series, parallel, mixed series-parallel,
+voltage-divider, Wheatstone bridge, delta, and star topologies.
+Images are accompanied by YOLO-format annotations covering 11 classes
+(edge/junction, ground, current source, node point, resistor, voltage
+source, and identifier classes).
+The dataset is released under the Apache~2.0 license.
+
+\textbf{CGHD.}
+The CGHD dataset (Version~16, DOI:~\texttt{10.5281/zenodo.17469897})~%
+\cite{thoma2025cghd} provides 3,269 annotated hand-drawn circuit
+diagram images contributed by 31 main drafters, plus additional
+real-world examination images.
+It includes 248,020 bounding-box annotations across 59 object classes.
+CGHD Version~16 is released under CC~BY~4.0.
+
+\subsection{Data Selection}
+
+AITEE images were included if the corresponding label file contained at
+least one resistor annotation, ensuring non-trivial circuit content.
+All 828 available images met this criterion.
+For fault injection, images with at least three resistors and three
+edge/junction annotations were selected to ensure structural
+meaningfulness after modification; this yielded 200 source circuits.
+
+\subsection{Task Taxonomy}
+
+CircuitBench evaluates three task categories:
+
+\textbf{Task A --- Component recognition} covers three subtasks:
+\emph{component\_presence} (binary: is a given component type present?),
+\emph{component\_count} (integer: how many of a given type?), and
+\emph{component\_enumeration} (free-text: list all types with counts).
+
+\textbf{Task B --- Connectivity and topology reasoning} covers three
+subtasks: \emph{topology\_structure} (binary: are two components in
+series or parallel?), \emph{node\_count} (integer: how many circuit
+nodes?), and \emph{component\_total} (integer: total component count).
+
+\textbf{Task E --- Fault diagnosis} covers three subtasks:
+\emph{fault\_presence} (binary: is a fault present?),
+\emph{fault\_diagnosis} (free-text: identify and describe the fault),
+and \emph{circuit\_description} (free-text: describe all component types
+and general topology).
+
+\subsection{Controlled Fault Generation}
+
+Task~E uses modified circuit images in which a single fault has been
+deterministically introduced by one of two operations:
+
+\textbf{Open circuit:} a white rectangle is drawn over the wire segment
+between two nearby edge/junction nodes, creating a broken connection.
+
+\textbf{Disconnected component:} a randomly selected resistor's bounding
+box (plus a 5-pixel margin) is filled white, removing the component.
+
+Only modified copies are used; source images are never altered.
+Each fault produces both a presence (E1) and a diagnosis (E2) item.
+All transformation details are recorded in the benchmark manifest.
+
+\subsection{Ground-Truth Construction}
+
+Binary and integer ground truth for Tasks~A and~B is derived
+deterministically from AITEE's YOLO annotations.
+Fault ground truth is specified by construction: the fault type is known
+exactly from the transformation applied.
+Free-text responses are scored by keyword matching, described in
+Section~\ref{sec:setup}.
+
+\subsection{Benchmark Statistics and Splits}
+
+Table~\ref{tab:dataset} summarizes the benchmark.
+Items are split 70/30 test/dev by source image, keeping all items
+from the same source circuit in the same split to prevent leakage.
+
+\begin{table}[t]
+\centering
+\caption{CircuitBench Dataset Composition}
+\label{tab:dataset}
+\begin{tabular}{llrr}
+\toprule
+\textbf{Task} & \textbf{Subtask} & \textbf{Dev} & \textbf{Test} \\
+\midrule
+\multirow{3}{*}{A --- Component}
+  & component\_presence    & 1{,}158 &   498 \\
+  & component\_count       &    975  &   410 \\
+  & component\_enumeration &    579  &   249 \\
+  & \textit{A total}       & \textit{2{,}712} & \textit{1{,}157} \\
+\midrule
+\multirow{3}{*}{B --- Topology}
+  & topology\_structure    &    577  &   249 \\
+  & node\_count            &    577  &   249 \\
+  & component\_total       &    579  &   249 \\
+  & \textit{B total}       & \textit{1{,}733} & \textit{747} \\
+\midrule
+\multirow{3}{*}{E --- Fault}
+  & fault\_presence        &    859  &   368 \\
+  & circuit\_description   &    433  &   190 \\
+  & fault\_diagnosis       &    280  &   119 \\
+  & \textit{E total}       & \textit{1{,}572} & \textit{677} \\
+\midrule
+\textbf{Total} & & \textbf{6{,}017} & \textbf{2{,}581} \\
+\bottomrule
+\end{tabular}
+\vspace{2pt}
+
+\footnotesize{Task~E includes 798 fault-injected items from 200 source
+circuits (up to two fault types each, yielding E1 and E2 items per fault).}
+\end{table}
+
+\subsection{Licensing and Attribution}
+
+AITEE images are used under the Apache~2.0 license.
+CGHD images are used under CC~BY~4.0.
+CircuitBench benchmark items (questions, ground truth, fault-injected
+images) are original contributions of this work.
+The AITEE and CGHD dataset creators are not authors of CircuitBench.
+
+
+% ===========================================================================
+\section{Experimental Setup}
+\label{sec:setup}
+
+\subsection{Evaluated Models}
+
+Table~\ref{tab:models} lists the three models evaluated.
+All are open-weight models run locally via Ollama using 4-bit quantized
+GGUF weights, requiring no API keys.
+
+\begin{table}[t]
+\centering
+\caption{Evaluated Models}
+\label{tab:models}
+\begin{tabular}{lll}
+\toprule
+\textbf{Model} & \textbf{Parameters} & \textbf{Quant.} \\
+\midrule
+Gemma 3 4B~\cite{gemmateam2025gemma3}  & 4.3B & Q4\_K\_M \\
+LLaVA 7B~\cite{liu2023llava}           & 7B   & Q4\_K\_M \\
+LLaVA-Phi3~\cite{liu2023llava,abdin2024phi3} & 4B & Q4\_K\_M \\
+\bottomrule
+\end{tabular}
+\vspace{2pt}
+
+\footnotesize{All models accessed via Ollama on an Intel Core Ultra CPU
+with 16\,GB RAM. Model sizes: Gemma~3~4B (3.3\,GB), LLaVA~7B (4.7\,GB),
+LLaVA-Phi3 (2.9\,GB).}
+\end{table}
+
+\subsection{Prompting Protocol}
+
+Each item is presented as a single user turn: the circuit image followed
+by a task-specific prompt template.
+Templates are identical across all models; no system prompt is used.
+Example templates:
+
+\textbf{Fault presence (E1):}
+\textit{``Analyze the electrical circuit shown in the image.
+Is there a circuit fault present? Answer Yes or No.''}
+
+\textbf{Topology structure (B2):}
+\textit{``Examine the electrical circuit diagram carefully.
+Pay attention to how the components are connected.
+\{question\}
+Respond with only `Yes' or `No'. Do not include any explanation.''}
+
+\textbf{Component count (A2):}
+\textit{``Examine the electrical circuit diagram in the provided image.
+\{question\}
+Respond with only the number. Do not include any explanation.''}
+
+All prompt templates are included in the benchmark release.
+
+\subsection{Inference Parameters}
+
+Temperature: 0; maximum output tokens: 256; no in-context examples
+(zero-shot).
+A 0.5-second delay is applied between requests.
+
+\subsection{Evaluation Metrics}
+
+\textbf{Binary tasks} (E1, B2, A1): accuracy based on whether the
+first token of the response matches the ground-truth ``yes'' or ``no''
+(case-insensitive).
+
+\textbf{Integer tasks} (A2, B1): accuracy based on whether the first
+integer token in the response matches the ground-truth count.
+
+\textbf{Free-text tasks} (E2, A3, E3): keyword matching over component
+names and counts from the ground truth.
+A response is marked correct only if all required keywords are present.
+This scorer is conservative and may undercount genuinely correct
+responses phrased differently.
+
+\subsection{Evaluation Sample}
+
+The evaluation presented here uses a development-split sample:
+81 items for Gemma~3~4B, 50 items for LLaVA-Phi3, and 31 items for
+LLaVA~7B, drawn from the 6,017-item development split.
+All items were sampled before model evaluation; no test-split items
+were used.
+The 2,581-item frozen test split is reserved for future full-scale
+evaluation.
+
+
+% ===========================================================================
+\section{Results}
+\label{sec:results}
+
+\subsection{Overall Performance}
+
+Table~\ref{tab:overall} reports overall and per-task accuracy for all
+three models.
+Gemma~3~4B achieves the highest overall accuracy at 38.3\%,
+followed by LLaVA~7B at 23.3\%, and LLaVA-Phi3 at 8.0\%.
+No model exceeds 40\% on any task category, and all models perform
+at or near 0\% on Task~B (topology/connectivity reasoning) in
+aggregate---largely driven by complete failure on node-count and
+component-total subtasks.
+
+\begin{table}[t]
+\centering
+\caption{Overall and Per-Task Accuracy (Development Split)}
+\label{tab:overall}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Overall} & \textbf{Task A} & \textbf{Task B} & \textbf{Task E} \\
+\midrule
+Gemma 3 4B  & 38.3\% & 38.6\% & 29.2\% & 53.8\% \\
+LLaVA 7B    & 23.3\% & 26.7\% & 33.3\% &  0.0\% \\
+LLaVA-Phi3  &  8.0\% & 15.4\% &  0.0\% &  0.0\% \\
+\midrule
+\textit{n (items)} & & \textit{81 / 30 / 50} & \textit{81 / 30 / 50} & \textit{81 / 30 / 50} \\
+\bottomrule
+\end{tabular}
+\vspace{2pt}
+\footnotesize{Model order: Gemma~3~4B / LLaVA~7B / LLaVA-Phi3.}
+\end{table}
+
+\subsection{Performance by Subcategory}
+
+Table~\ref{tab:subtask} provides a detailed breakdown.
+Several patterns are immediately apparent.
+
+\begin{table}[t]
+\centering
+\caption{Accuracy by Task Subcategory}
+\label{tab:subtask}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Subcategory} & \textbf{Gemma 3 4B} & \textbf{LLaVA 7B} & \textbf{LLaVA-Phi3} \\
+\midrule
+\multicolumn{4}{l}{\textit{Task A --- Component Recognition}} \\
+component\_presence    & 47.1\% & 16.7\% & 40.0\% \\
+component\_count       & 26.3\% & 50.0\% &  0.0\% \\
+component\_enumeration & 50.0\% &  0.0\% &  0.0\% \\
+\midrule
+\multicolumn{4}{l}{\textit{Task B --- Topology Reasoning}} \\
+topology\_structure    & 87.5\% &100.0\% &  0.0\% \\
+node\_count            &  0.0\% &  0.0\% &  0.0\% \\
+component\_total       &  0.0\% &  0.0\% &  0.0\% \\
+\midrule
+\multicolumn{4}{l}{\textit{Task E --- Fault Diagnosis}} \\
+fault\_presence        & 87.5\% &  0.0\% &  0.0\% \\
+fault\_diagnosis       &  0.0\% &  0.0\% &  0.0\% \\
+circuit\_description   &  0.0\% &  0.0\% &  0.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Binary yes/no tasks are disproportionately easy.}
+Both Gemma~3~4B and LLaVA~7B achieve 87.5\% and 100\% respectively
+on topology\_structure, and Gemma~3~4B achieves 87.5\% on
+fault\_presence.
+These are binary forced-choice tasks; performance may partly reflect
+response-format bias rather than genuine circuit understanding.
+
+\textbf{Counting tasks are inconsistent.}
+LLaVA~7B achieves 50\% on component\_count while Gemma~3~4B achieves
+26.3\% and LLaVA-Phi3 0\%.
+However, all three models score 0\% on node\_count and
+component\_total, suggesting that counting nodes or total components
+from circuit images is beyond current local VLM capability.
+
+\textbf{Free-text tasks fail universally.}
+All three models score 0\% on fault\_diagnosis and circuit\_description.
+This is partly a scorer artifact (strict keyword matching), but manual
+inspection confirms that models generally either hallucinate component
+types, describe non-existent circuit features, or produce responses
+that do not match the expected component-name-plus-count format.
+
+\textbf{Fault diagnosis (free-text) vs.\ fault presence (binary).}
+The contrast between Gemma~3~4B's 87.5\% on fault\_presence and
+0\% on fault\_diagnosis is striking.
+The model can detect that \emph{something} is wrong but cannot describe
+\emph{what} is wrong in a scorable format.
+
+
+% ===========================================================================
+\section{Error Analysis}
+\label{sec:error}
+
+Manual inspection of a sample of incorrect responses reveals the
+following recurring patterns.
+
+\textbf{Format non-compliance.}
+LLaVA-Phi3 frequently ignores instructions to answer with only
+``Yes'', ``No'', or a number, instead producing verbose descriptions
+beginning with phrases like ``The circuit shows\ldots''
+This explains its 0\% on topology\_structure despite LLaVA~7B (same
+architecture, larger model) achieving 100\%---the smaller Phi3 base
+model is less instruction-following.
+
+\textbf{Counting errors.}
+For component\_count, models typically answer with a value 1--3 away
+from the correct count.
+Gemma~3~4B tends to undercount (e.g., reporting 2 resistors when 4
+are present), consistent with failing to distinguish closely placed
+or overlapping symbols.
+LLaVA~7B is more accurate on this subtask (50\%) but inconsistent
+across circuit types.
+
+\textbf{Node-count failure.}
+All models score 0\% on node\_count.
+Node counting requires understanding circuit topology globally---tracing
+wires to identify all distinct electrical nodes---which appears to
+exceed the spatial reasoning capability of all evaluated models in
+this zero-shot setting.
+
+\textbf{Hallucinated fault descriptions.}
+On fault\_diagnosis items, Gemma~3~4B typically produces responses
+describing a circuit fault in general terms (e.g., ``open circuit
+detected'') without correctly identifying the specific affected
+component or location.
+This is semantically close to correct but fails strict keyword scoring.
+A rubric-based human evaluation would likely credit partial understanding
+for these responses.
+
+\textbf{Component enumeration format mismatch.}
+On circuit\_description, all models produce syntactically correct
+descriptions (e.g., ``The circuit contains three resistors and one
+voltage source'') but fail the scorer because the expected format
+is ``Component~(N)'' notation.
+These responses represent a scorer limitation as much as a model
+failure and should be graded manually before drawing conclusions about
+this subcategory.
+
+
+% ===========================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+The results reveal a clear capability hierarchy among the three
+evaluated models (Gemma~3~4B $>$ LLaVA~7B $>$ LLaVA-Phi3) and a
+consistent pattern across all models: binary classification tasks are
+handled far better than counting or free-text generation tasks.
+
+The gap between fault\_presence (87.5\% for Gemma~3~4B) and
+fault\_diagnosis (0\%) is the most practically significant finding.
+A system that detects a fault but cannot explain it provides limited
+value to a student debugging a circuit.
+This suggests that current small open-weight VLMs may be usable as a
+rough ``something looks wrong'' detector but not as a reliable
+diagnostic tool.
+
+The universal failure on node\_count (0\% across all models) points to
+a fundamental gap in circuit-graph understanding.
+Counting nodes requires tracing wire connectivity across the image---a
+form of spatial relational reasoning that appears absent in all three
+models tested.
+This is particularly relevant for AI tutoring applications where
+Kirchhoff's current law analysis requires correct node identification.
+
+LLaVA-Phi3's near-complete failure (8\% overall, 0\% on all tasks
+except component\_presence) appears primarily attributable to
+instruction-following breakdown: the 4B Phi3 base model frequently
+ignores format constraints, producing verbose answers where single
+tokens are expected.
+This is a practical deployment concern independent of circuit
+understanding.
+
+The benchmark's current evaluation uses development-split samples
+of 30--81 items per model, which is sufficient to identify broad
+patterns but insufficient for fine-grained statistical comparisons
+between models.
+The frozen 2,581-item test split is reserved for a future evaluation
+that includes cloud-API models (GPT-4o, Gemini, Claude) for comparison
+against the open-weight baselines established here.
+
+
+% ===========================================================================
+\section{Limitations}
+\label{sec:limitations}
+
+\begin{enumerate}
+
+\item \textbf{Small evaluation sample.}
+Development-split samples of 30--81 items per model support pattern
+identification but not rigorous statistical model comparison.
+Full test-split evaluation is needed for final conclusions.
+
+\item \textbf{Open-weight models only.}
+The evaluated models are small, locally-hosted, 4-bit quantized.
+State-of-the-art cloud-API VLMs (GPT-4o, Gemini 2.0 Flash,
+Claude Sonnet) may perform substantially better.
+
+\item \textbf{Conservative free-text scorer.}
+Keyword matching undercounts partially correct free-text responses.
+Subcategories including fault\_diagnosis and circuit\_description
+require human review to calibrate.
+
+\item \textbf{Benchmark source.}
+CircuitBench is derived from AITEE and CGHD, which were not designed
+as VLM evaluation resources.
+The circuit distribution reflects what is available in these datasets.
+
+\item \textbf{Circuit complexity.}
+AITEE depicts first-semester educational circuits.
+Results may not generalize to more complex topologies.
+
+\item \textbf{Model contamination.}
+AITEE and CGHD are publicly available.
+Contemporary VLMs may have encountered their images during pretraining,
+and high accuracy should not be interpreted as pure unseen
+generalization.
+
+\item \textbf{Synthetic faults.}
+The two fault types (open circuit, disconnected component) are
+controlled synthetic modifications.
+Real student wiring mistakes may exhibit different visual
+characteristics.
+
+\item \textbf{Zero-shot prompting only.}
+Performance may improve with few-shot examples or chain-of-thought
+prompting; this is not explored here.
+
+\end{enumerate}
+
+
+% ===========================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We introduced CircuitBench, a source-backed benchmark of 8,598 items
+for evaluating VLMs on electronic-circuit understanding, reasoning, and
+fault diagnosis, derived from the AITEE and CGHD datasets.
+Evaluation of three locally-hosted open-weight VLMs reveals a
+consistent pattern: binary yes/no tasks (fault presence, topology
+structure) are handled reasonably well by the best model (Gemma~3~4B:
+87.5\%), while counting tasks, free-text diagnosis, and node
+identification fail near-universally across all models.
+Overall accuracy ranges from 8.0\% (LLaVA-Phi3) to 38.3\%
+(Gemma~3~4B)---well below the reliability threshold required for
+autonomous instructional use.
+
+These results suggest that small open-weight VLMs in their current
+form are not suitable as autonomous circuit-debugging assistants,
+though they may be useful as coarse anomaly detectors or
+component-presence checkers in human-in-the-loop workflows.
+
+Future work includes full test-split evaluation with cloud-API models,
+extending the benchmark to hand-drawn circuit representations (Task~F),
+adding quantitative reasoning tasks (Task~D), and calibrating the
+free-text scorer against human judgments.
+
+
+% ===========================================================================
+\section*{Data and Code Availability}
+
+The CircuitBench benchmark manifest (JSONL), evaluation scripts,
+scored results, and fault-injected images are available at
+\url{https://github.com/sasha-sam/circuitbench}.
+Source datasets: AITEE~\cite{knievel2025aitee_dataset} and
+CGHD~\cite{thoma2025cghd}.
+
+
+% ===========================================================================
+\section*{AI Assistance Disclosure}
+
+Generative AI tools, including Claude (Anthropic), were used to assist
+with code development, manuscript organization, and language refinement
+during preparation of this work.
+All research questions, experimental design choices, data-source
+selection, source verification, model evaluations, result interpretation,
+citation verification, and final manuscript content were reviewed and
+validated by the author.
+AI systems were not treated as authors.
+
+
+% ===========================================================================
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

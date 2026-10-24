@@ -1,0 +1,5 @@
+Examine the electrical circuit diagram in the provided image.
+
+{question}
+
+Respond with only the number. Do not include any explanation.

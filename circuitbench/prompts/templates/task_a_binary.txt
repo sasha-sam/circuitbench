@@ -1,0 +1,5 @@
+Examine the electrical circuit diagram in the provided image.
+
+{question}
+
+Respond with only "Yes" or "No". Do not include any explanation.

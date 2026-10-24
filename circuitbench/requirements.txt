@@ -1,0 +1,25 @@
+# CircuitBench — Python dependencies
+
+# Core
+python-dotenv>=1.0.0
+
+# VLM API clients
+openai>=1.30.0
+anthropic>=0.30.0
+google-genai>=1.0.0
+
+# Data handling
+pandas>=2.0.0
+Pillow>=10.0.0
+
+# Evaluation & metrics
+scikit-learn>=1.3.0
+scipy>=1.11.0
+
+# Visualization
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# Utilities
+tqdm>=4.66.0
+jsonlines>=4.0.0
